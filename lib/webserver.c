@@ -84,7 +84,7 @@ static err_t callback_receber(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
         "<form action=\"./azul\"><button class=\"%s\">%s Azul</button></form>\n"
         "<hr>\n"
         "<form action=\"./sensor_presenca\"><button class=\"%s\">%s Presenca</button></form>\n"
-        "<form action=\"./sensor_luz\"><button class=\"%s\">%s LDR</form>\n"
+        "<form action=\"./sensor_luz\"><button class=\"%s\">%s LDR</button></form>\n"
         "</body></html>",
         red_on ? "btn-on" : "btn-off",
         red_on ? "Desligar" : "Ligar",
