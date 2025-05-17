@@ -1,66 +1,94 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "lwip/tcp.h"
-#include "leds.h"
-#include "sensores.h"
-#include <stdbool.h>
+#include <stdio.h>             
+#include <stdlib.h>            
+#include <string.h>            
+#include "lwip/tcp.h"         
+#include "leds.h"              
+#include "sensores.h"          
+#include <stdbool.h>           
 
-// Variáveis globais de estado dos LEDs
+// Estado individual de cada LED
 bool red_on = false;
 bool green_on = false;
 bool blue_on = false;
 
+// Estado por "cômodo" controlado via interface web
+bool quarto_on = false;
+bool sala_on = false;
+bool cozinha_on = false;
+
+// Declarações das funções de callback para o servidor web
 static err_t callback_aceitar(void *arg, struct tcp_pcb *newpcb, err_t err);
 static err_t callback_receber(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
 
+// Função que processa as requisições recebidas via navegador
 void processar_requisicao(char *req) {
-    if (strstr(req, "GET /vermelho")) {
-    red_on = !red_on;
-    set_led_red(red_on);
-    controle_manual_led_red = true;
+    // Alterna os LEDs do "quarto" (vermelho + verde)
+    if (strstr(req, "GET /quarto")) {
+        quarto_on = !quarto_on;
+        set_led_red(quarto_on);
+        set_led_green(quarto_on);
+        red_on = quarto_on;
+        green_on = quarto_on;
+        controle_manual_led_red = true;  // Desativa modo automático
     }
-    if (strstr(req, "GET /verde")) {
-    green_on = !green_on;
-    set_led_green(green_on);
+
+    // Alterna os LEDs da "sala" (verde + azul)
+    if (strstr(req, "GET /sala")) {
+        sala_on = !sala_on;
+        set_led_green(sala_on);
+        set_led_blue(sala_on);
+        green_on = sala_on;
+        blue_on = sala_on;
     }
-    if (strstr(req, "GET /azul")) {
-    blue_on = !blue_on;
-    set_led_blue(blue_on);
+
+    // Alterna os LEDs da "cozinha" (azul + vermelho)
+    if (strstr(req, "GET /cozinha")) {
+        cozinha_on = !cozinha_on;
+        set_led_blue(cozinha_on);
+        set_led_red(cozinha_on);
+        blue_on = cozinha_on;
+        red_on = cozinha_on;
     }
-    if (strstr(req, "GET /sensor_presenca")) {
-        sensor_presenca_ativo = !sensor_presenca_ativo;
-    }
-    if (strstr(req, "GET /sensor_luz")) {
-        sensor_luz_ativo = !sensor_luz_ativo;
+
+    // Alterna o estado dos sensores (ativar/desativar modo automático)
+    if (strstr(req, "GET /sensores")) {
+        sensores_ativos = !sensores_ativos;
+        if (sensores_ativos) {
+            controle_manual_led_red = false;  // Restaura o modo automático
+        }
     }
 }
 
+// Inicializa o servidor web na porta 80
 void iniciar_webserver() {
-    struct tcp_pcb *pcb = tcp_new();
-    tcp_bind(pcb, IP_ADDR_ANY, 80);
-    pcb = tcp_listen(pcb);
-    tcp_accept(pcb, callback_aceitar);
+    struct tcp_pcb *pcb = tcp_new();                  // Cria um novo bloco de controle TCP
+    tcp_bind(pcb, IP_ADDR_ANY, 80);                   // Associa à porta 80 (HTTP)
+    pcb = tcp_listen(pcb);                            // Coloca em modo de escuta
+    tcp_accept(pcb, callback_aceitar);                // Define função para aceitar conexões
 }
 
+// Função chamada quando uma nova conexão é aceita
 static err_t callback_aceitar(void *arg, struct tcp_pcb *newpcb, err_t err) {
-    tcp_recv(newpcb, callback_receber);
+    tcp_recv(newpcb, callback_receber);               // Define função para processar dados recebidos
     return ERR_OK;
 }
 
+// Função chamada sempre que há uma nova requisição HTTP
 static err_t callback_receber(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
     if (!p) {
-        tcp_close(tpcb);
+        tcp_close(tpcb);                              // Fecha a conexão se não há dados
         return ERR_OK;
     }
 
+    // Copia o conteúdo da requisição HTTP para um buffer manipulável
     char *request = malloc(p->len + 1);
     memcpy(request, p->payload, p->len);
-    request[p->len] = 0;
+    request[p->len] = 0; // Finaliza a string
 
-    printf("REQ: %s\n", request);
-    processar_requisicao(request);
+    printf("REQ: %s\n", request);                     // Imprime a requisição no console
+    processar_requisicao(request);                    // Processa a requisição
 
+    // Gera a resposta HTML com os botões da interface web
     char html[1024];
     snprintf(html, sizeof(html),
         "HTTP/1.1 200 OK\r\n"
@@ -79,27 +107,23 @@ static err_t callback_receber(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, e
         "</head>\n"
         "<body>\n"
         "<h2>Smart Home - Controle</h2>"
-        "<form action=\"./vermelho\"><button class=\"%s\">%s Vermelho</button></form>\n"
-        "<form action=\"./verde\"><button class=\"%s\">%s Verde</button></form>\n"
-        "<form action=\"./azul\"><button class=\"%s\">%s Azul</button></form>\n"
+        "<form action=\"./quarto\"><button class=\"%s\">%s Quarto</button></form>\n"
+        "<form action=\"./sala\"><button class=\"%s\">%s Sala</button></form>\n"
+        "<form action=\"./cozinha\"><button class=\"%s\">%s Cozinha</button></form>\n"
         "<hr>\n"
-        "<form action=\"./sensor_presenca\"><button class=\"%s\">%s Presenca</button></form>\n"
-        "<form action=\"./sensor_luz\"><button class=\"%s\">%s LDR</button></form>\n"
+        "<form action=\"./sensores\"><button class=\"%s\">%s Sensores</button></form>\n"
         "</body></html>",
-        red_on ? "btn-on" : "btn-off",
-        red_on ? "Desligar" : "Ligar",
-        green_on ? "btn-on" : "btn-off",
-        green_on ? "Desligar" : "Ligar",
-        blue_on ? "btn-on" : "btn-off",
-        blue_on ? "Desligar" : "Ligar",
-        sensor_presenca_ativo ? "btn-on" : "btn-off",
-        sensor_presenca_ativo ? "Desativar" : "Ativar",
-        sensor_luz_ativo ? "btn-on" : "btn-off",
-        sensor_luz_ativo ? "Desativar" : "Ativar"
+        quarto_on ? "btn-on" : "btn-off", quarto_on ? "Desligar" : "Ligar",
+        sala_on ? "btn-on" : "btn-off", sala_on ? "Desligar" : "Ligar",
+        cozinha_on ? "btn-on" : "btn-off", cozinha_on ? "Desligar" : "Ligar",       
+        sensores_ativos ? "btn-on" : "btn-off", sensores_ativos ? "Desativar" : "Ativar"
     );
 
+    // Envia a resposta HTML gerada
     tcp_write(tpcb, html, strlen(html), TCP_WRITE_FLAG_COPY);
     tcp_output(tpcb);
+
+    // Libera a memória alocada
     free(request);
     pbuf_free(p);
     return ERR_OK;
