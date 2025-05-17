@@ -3,8 +3,7 @@
 
 #include <stdbool.h>
 
-extern bool sensor_luz_ativo;
-extern bool sensor_presenca_ativo;
+extern bool sensores_ativos;
 extern bool controle_manual_led_red;
 
 void sensores_init();
